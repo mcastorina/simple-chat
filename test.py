@@ -2,7 +2,7 @@ import curses
 
 
 stdscr = curses.initscr()
-#curses.noecho()
+curses.noecho()
 curses.nonl()
 stdscr.keypad(1)
 
@@ -18,11 +18,10 @@ try:
 		if a == 27: break
 		elif a == curses.KEY_BACKSPACE:
 			y, x = stdscr.getyx()
-			if x >= 2:
-				stdscr.addstr(' ')
-				stdscr.move(y, x)
-			else:
-				stdscr.move(y, x+1)
+			if x > 2:
+				stdscr.addstr(y, x-1, ' ')
+				stdscr.move(y, x-1)
+				msg = msg[0:-1]
 		elif a == ord('\n') or a == ord('\r'):
 			if len(msg) != 0:
 				stdscr.addstr(size_y-1, 2, ' '*len(msg))
@@ -30,7 +29,9 @@ try:
 				messages += [msg]
 				msg = ''
 			stdscr.move(size_y-1, 2)
-		else: msg += chr(a)
+		else:
+			stdscr.addstr(chr(a))
+			msg += chr(a)
 except:
 	pass
 
