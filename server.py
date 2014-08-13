@@ -1,55 +1,16 @@
-# import socket
-# import sys
+from socket import *
 
-# HOST = ''                 # Symbolic name meaning the local host
-# PORT = 50007              # Arbitrary non-privileged port
-# s = None
-# for res in socket.getaddrinfo(HOST, PORT, socket.AF_UNSPEC, socket.SOCK_STREAM, 0, socket.AI_PASSIVE):
-	# af, socktype, proto, canonname, sa = res
-	# try:
-		# s = socket.socket(af, socktype, proto)
-	# except socket.error, msg:
-		# s = None
-		# continue
-	# try:
-		# s.bind(sa)
-		# s.listen(1)
-	# except socket.error, msg:
-		# s.close()
-		# s = None
-		# continue
-	# break
-# if s is None:
-	# print 'could not open socket'
-	# sys.exit(1)
-# conn, addr = s.accept()
-# print 'Connected by', addr
-# while 1:
-	# data = conn.recv(1024)
-	# if not data: break
-	# conn.send(data)
-# conn.close()
+s = socket()
+#host = gethostname()
+host = '192.168.254.2'
+port = 1234
+s.bind((host, port))
 
-import socket
-HOST = ''
-PORT = 50007
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind((HOST, PORT))
-s.listen(1)
-while 1:
-	conn, addr = s.accept()
-	print 'Connected by', addr
-	usr = conn.recv(1024)
-	psw = conn.recv(1024)
-	accp = False
-	if (usr == 'Miccah' and psw == 'Miccah'):
-		accp = True
-		conn.send('Accepted')
-	else:
-		conn.send('Rejected')
-	while accp:
-		data = conn.recv(1024)
-		if data=='exit': break
-		print('Received: '+ data)
-	conn.close()
-	print addr, 'disconnected'
+s.listen(5)
+while True:
+	c, addr = s.accept()
+	print 'Connected from', addr
+	c.send('Thank you for connecting')
+	c.close()
+
+
