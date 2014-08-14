@@ -16,7 +16,7 @@ try:
 	while True:
 		a = stdscr.getch()
 		if a == 27: break
-		elif a == curses.KEY_BACKSPACE:
+		elif a in (curses.KEY_BACKSPACE, 0x7f):
 			y, x = stdscr.getyx()
 			if x > 2:
 				stdscr.addstr(y, x-1, ' ')
