@@ -18,14 +18,15 @@ win1.refresh()
 win2.refresh()
 
 con1 = curses.newwin(size_y-7, size_x-2, 1, 1)
-con2 = curses.newwin(3, size_x-2, size_y-4, 1)
 con1.scrollok(True)
-con2.scrollok(True)
-
-con2.keypad(1)
-
 con1.refresh()
-con2.refresh()
+
+con2 = curses.newpad(10, size_x-2)
+#con2.scrollok(True)
+con2_pos = 0
+def c2ref(): con2.refresh(con2_pos, 0, size_y-4, 1, size_y-2, size_x-2)
+c2ref()
+con2.keypad(1)
 
 messages = []
 
@@ -36,17 +37,22 @@ try:
 		if a == 27: break
 		elif a in (curses.KEY_BACKSPACE, 0x7f):
 			y, x = con2.getyx()
-			if len(msg) > 0: msg = msg[0:-1]
+			if len(msg) > 0:
+				msg = msg[0:-1]
+				if x == 0 and y-con2_pos == 1 and con2_pos > 0:
+					con2_pos = max(0, con2_pos-2)
 			if y > 0 and x == 0:
 				con2.addstr(y-1, size_x-3, ' ')
 				con2.move(y-1, size_x-3)
 			elif x > 0:
 				con2.addstr(y, x-1, ' ')
 				con2.move(y, x-1)
+			c2ref()
 		elif a in (ord('\n'), ord('\r'), curses.KEY_ENTER):
 			messages += [msg]
 			msg = ''
 			con2.clear()
+			c2ref()
 		elif a == curses.KEY_UP:
 			#con2.scroll(-1)
 			pass
@@ -54,8 +60,12 @@ try:
 			#con2.scroll(1)
 			pass
 		else:
+			y, x = con2.getyx()
+			if y-con2_pos == 2 and x == size_x-3:
+				con2_pos += 1
 			con2.addstr(chr(a))
 			msg += chr(a)
+			c2ref()
 except:
 	pass
 
