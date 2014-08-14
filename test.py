@@ -1,37 +1,34 @@
 import curses
 
-
 stdscr = curses.initscr()
-curses.noecho()
+#curses.noecho()
 curses.nonl()
 stdscr.keypad(1)
 
 size_y, size_x = stdscr.getmaxyx()
 #stdscr.border()
-stdscr.move(size_y-1, 0)
-stdscr.addstr('> ')
-messages = []
+
+win1 = curses.newwin(size_y-5, size_x, 0, 0)
+win2 = curses.newwin(5, size_x, size_y-5, 0)
+win1.border()
+win2.border()
+win1.addstr(0, 1, 'Text')
+win2.addstr(0, 1, 'Input')
+win1.refresh()
+win2.refresh()
+
+con1 = curses.newwin(size_y-7, size_x-2, 1, 1)
+con2 = curses.newwin(3, size_x-2, size_y-4, 1)
+con1.scrollok(True)
+con2.scrollok(True)
+
+con1.refresh()
+con2.refresh()
+
 try:
-	msg = ''
 	while True:
-		a = stdscr.getch()
+		a = con2.getch()
 		if a == 27: break
-		elif a in (curses.KEY_BACKSPACE, 0x7f):
-			y, x = stdscr.getyx()
-			if x > 2:
-				stdscr.addstr(y, x-1, ' ')
-				stdscr.move(y, x-1)
-				msg = msg[0:-1]
-		elif a == ord('\n') or a == ord('\r'):
-			if len(msg) != 0:
-				stdscr.addstr(size_y-1, 2, ' '*len(msg))
-				stdscr.addstr(len(messages), 0, '| '+msg)
-				messages += [msg]
-				msg = ''
-			stdscr.move(size_y-1, 2)
-		else:
-			stdscr.addstr(chr(a))
-			msg += chr(a)
 except:
 	pass
 
@@ -40,5 +37,4 @@ stdscr.keypad(0)
 curses.echo()
 curses.endwin()
 
-print messages
 
