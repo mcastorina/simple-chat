@@ -7,7 +7,10 @@ print 'Connecting to', host+':'+str(port)
 
 s.connect((host, port))
 print s.recv(1024)
-s.close()
+s.send("Hello from client")
+
+while True:
+	s.send(raw_input('> '))
 
 # Multi-threading
 # One thread to listen for incoming messages

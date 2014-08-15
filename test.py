@@ -40,7 +40,7 @@ try:
 			if len(msg) > 0:
 				msg = msg[0:-1]
 				if x == 0 and y-con2_pos == 1 and con2_pos > 0:
-					con2_pos = max(0, con2_pos-2)
+					con2_pos -= 1
 			if y > 0 and x == 0:
 				con2.addstr(y-1, size_x-3, ' ')
 				con2.move(y-1, size_x-3)
@@ -54,12 +54,14 @@ try:
 			con2.clear()
 			c2ref()
 		elif a == curses.KEY_UP:
-			#con2.scroll(-1)
 			pass
 		elif a == curses.KEY_DOWN:
-			#con2.scroll(1)
 			pass
-		else:
+		elif a == curses.KEY_LEFT:
+			pass
+		elif a == curses.KEY_RIGHT:
+			pass
+		elif len(msg) < (size_x-2)*10:
 			y, x = con2.getyx()
 			if y-con2_pos == 2 and x == size_x-3:
 				con2_pos += 1
