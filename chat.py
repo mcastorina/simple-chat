@@ -1,84 +1,85 @@
-import socket, select, sys
+import socket, select, sys, threading, time
 
-RECV_BUFFER = 4096
-
-if __name__ == "__main__":
-	s = p = None
-	if len(sys.argv) != 3:
-		print "Usage: python chat.py hostname port"
-		sys.exit()
-	host = sys.argv[1]
-	port = int(sys.argv[2])
-	server_up = True
-	
-	s = socket.socket()
-	p = None
-	try:
-		s.connect((host, port))
-	except:
-		server_up = False
-
-	if server_up:
-		print "Connected to server."
-	else:
-		s.bind(('', port))
-		s.listen(10)
-		print "Waiting for connection from %s" % (host)
-	
-	sockets = [s, sys.stdin]
-	while True:
-		read_sockets, write_sockets, error_sockets = select.select(sockets, [], [])
-		for sock in read_sockets:
-			if server_up:
-				if sock == s:
-					# Received message
-					data = sock.recv(RECV_BUFFER)
-					if not data:
-						print 'Server closed.'
-						sys.exit()
+class Chat(threading.Thread):
+	def __init__(self, host, port):
+		threading.Thread.__init__(self)
+		self.daemon = True
+		self._stop = False
+		self._s = self._p = None
+		self.host = host
+		self.port = port
+		self.server = False
+		self._sockets = []
+		self.sent = []
+		self.received = []
+		self.RECV_BUFFER = 4096
+	def connect(self):
+		if self._stop:
+			print 'The thread has exited.'
+			return
+		self._s = socket.socket()
+		try: self._s.connect((self.host, self.port))
+		except:
+			self.server = True
+			print 'Running as server.'
+		
+		if self.server:
+			self._s.bind(('', self.port))
+			self._s.listen(10)
+			print "Waiting for connection from %s" % (self.host)
+		else: print "Connected to %s" % (self.host)
+		self._sockets = [self._s]
+	def run(self):
+		while not self._stop:
+			rs, ws, es = select.select(self._sockets, [], [], 5)
+			for sock in rs:
+				if self.server:
+					if sock == self._p:
+						# Data received
+						try:
+							data = sock.recv(self.RECV_BUFFER)
+							if data: self.received += [data]
+						except:
+							print 'error'
+							sock.close()
+							break
 					else:
-						sys.stdout.write(data)
+						# New connection
+						self._p, addr = self._s.accept()
+						hostname = ''
+						try: hostname = socket.gethostbyaddr(addr[0])[0]
+						except: pass
+						if addr[0] != self.host and hostname != self.host:
+							print 'Refusing'
+							self._p.close()
+							self._p = None
+						else:
+							self._sockets += [self._p]
 				else:
-					msg = sys.stdin.readline()
-					s.send(msg)
-			else:
-				if sock == s:
-					# New connection
-					p, addr = s.accept()
-					hostname = ''
-					try: hostname = socket.gethostbyaddr(addr[0])[0]
-					except: pass
-					if addr[0] != host and hostname != host:
-						print 'Received connection from %s, refusing.' % (addr[0])
-						p.close()
-					else:
-						sockets += [p]
-						print 'Connection established with %s' % (addr[0])
-				elif sock == p:
-					# Data received
-					try:
-						data = sock.recv(RECV_BUFFER)
-						if data: sys.stdout.write(data)
-					except:
-						print 'Disconnected.'
-						sock.close()
-						break
-				else:
-					msg = sys.stdin.readline()
-					try: p.send(msg)
-					except:
-						print 'Disconnected.'
-						sys.exit()
-	#if s: s.close()
-	#if p: p.close()
+					if sock == self._s:
+						# Data received
+						data = sock.recv(self.RECV_BUFFER)
+						if data: self.received += [data]
+						else:
+							print 'error3'
+							return
+	def send(self, data):
+		self.sent += [data]
+		if self.server:
+			try: self._p.send(data)
+			except: print 'error4'
+		else: self._s.send(data)
+	def close(self):
+		try:
+			self._stop = True
+			self.join()
+			self._s.close()
+			self._p.close()
+		except: pass
 
-
-# alice: AE
-# bob:	 BE
-# alice: cert
-# bob:	 BS(hash(cert)), cert2
-# alice: AS(hash(cert2))
-# alice: BE(SK)
-
-# Two threads: one handles sending messages, the other handles receiving messages (via select)
+if __name__ == '__main__':
+	chat = Chat('localhost', 1234)
+	chat.connect()
+	chat.start()
+	while True: pass
 
