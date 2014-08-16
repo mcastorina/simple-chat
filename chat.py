@@ -1,4 +1,4 @@
-import socket, select, sys, threading, time
+import socket, select, sys, threading, time, M2Crypto, os.path
 
 class Chat(threading.Thread):
 	def __init__(self, host, port):
@@ -21,6 +21,7 @@ class Chat(threading.Thread):
 		try: self._s.connect((self.host, self.port))
 		except:
 			self.server = True
+			self._s = socket.socket()
 			print 'Running as server.'
 		
 		if self.server:
@@ -77,9 +78,43 @@ class Chat(threading.Thread):
 			self._p.close()
 		except: pass
 
-if __name__ == '__main__':
-	chat = Chat('localhost', 1234)
-	chat.connect()
-	chat.start()
-	while True: pass
-
+class SChat(Chat):
+	def __init__(self, host, port):
+		Chat.__init__(self, host, port)
+		self.ENC = 1
+		self.DEC = 0
+		self.key = None
+		self.iv = None
+		self._sk = 'id-rsa'
+		self._ek = 'id-rsa.pub'
+		if not os.path.isfile(self._sk) or not os.path.isfile(self._ek):
+			self._generate_rsa_keypair()
+	def _generate_rsa_keypair(self, bits=2048):
+		new_key = M2Crypto.RSA.gen_key(bits, 65537)
+		new_key.save_key('id-rsa', cipher=None)
+		new_key.save_pub_key('id-rsa.pub')
+	def _rsa_encrypt(self, data):
+		return M2Crypto.RSA.load_pub_key(self._ek).public_encrypt(data, M2Crypto.RSA.pkcs1_oaep_padding)
+	def _rsa_decrypt(self, v):
+		return M2Crypto.RSA.load_key(self._sk).private_decrypt(v, M2Crypto.RSA.pkcs1_oaep_padding)
+	def _generate_sym_key(self):
+		self.key = M2Crypto.Rand.rand_bytes(32)
+		self.iv = M2Crypto.Rand.rand_bytes(16)
+	def _generate_cipher(self, op):
+		return M2Crypto.EVP.Cipher(alg='aes_256_cbc', key=self.key, iv=self.iv, op=op)
+	def _aes_encrypt(self, data):
+		cipher = self._generate_cipher(self.ENC)
+		v = cipher.update(data)
+		v = v + cipher.final()
+		del(cipher)
+		return v
+	def _aes_decrypt(self, v):
+		cipher = self._generate_cipher(self.DEC)
+		data = cipher.update(v)
+		data = msg + cipher.final()
+		del(cipher)
+		return data
+	def _handhsake(self, peer):
+		pass
+	def connect(self):
+		Chat.connect(self)
