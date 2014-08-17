@@ -1,4 +1,4 @@
-import socket, select, sys, threading, time, M2Crypto, os.path
+import socket, select, sys, threading, time, M2Crypto, os.path, hashlib, json
 
 class Chat(threading.Thread):
 	def __init__(self, host, port):
@@ -28,23 +28,10 @@ class Chat(threading.Thread):
 			self._s.bind(('', self.port))
 			self._s.listen(10)
 			print "Waiting for connection from %s" % (self.host)
-		else: print "Connected to %s" % (self.host)
-		self._sockets = [self._s]
-	def run(self):
-		while not self._stop:
-			rs, ws, es = select.select(self._sockets, [], [], 5)
-			for sock in rs:
-				if self.server:
-					if sock == self._p:
-						# Data received
-						try:
-							data = sock.recv(self.RECV_BUFFER)
-							if data: self.received += [data]
-						except:
-							print 'error'
-							sock.close()
-							break
-					else:
+			while self._p == None:
+				rs, ws, es = select.select([self._s], [], [], 5)
+				for sock in rs:
+					if sock == self._s:
 						# New connection
 						self._p, addr = self._s.accept()
 						hostname = ''
@@ -55,15 +42,32 @@ class Chat(threading.Thread):
 							self._p.close()
 							self._p = None
 						else:
-							self._sockets += [self._p]
-				else:
-					if sock == self._s:
-						# Data received
+							self._sockets = [self._s, self._p]
+						
+		else:
+			print "Connected to %s" % (self.host)
+			self._sockets = [self._s]
+		self.start()
+	def run(self):
+		while not self._stop:
+			rs, ws, es = select.select(self._sockets, [], [], 5)
+			for sock in rs:
+				if self.server and sock == self._p:
+					# Server - Data received
+					try:
 						data = sock.recv(self.RECV_BUFFER)
 						if data: self.received += [data]
-						else:
-							print 'error3'
-							return
+					except:
+						print 'error'
+						sock.close()
+						break
+				elif not self.server and sock == self._s:
+					# Client - Data received
+					data = sock.recv(self.RECV_BUFFER)
+					if data: self.received += [data]
+					else:
+						print 'error3'
+						return
 	def send(self, data):
 		self.sent += [data]
 		if self.server:
@@ -85,18 +89,18 @@ class SChat(Chat):
 		self.DEC = 0
 		self.key = None
 		self.iv = None
-		self._sk = 'id-rsa'
-		self._ek = 'id-rsa.pub'
-		if not os.path.isfile(self._sk) or not os.path.isfile(self._ek):
+		self._sk = self._ek = None
+		if not os.path.isfile('id-rsa') or not os.path.isfile('id-rsa.pub'):
 			self._generate_rsa_keypair()
+		self._sk = M2Crypto.RSA.load_key('id-rsa')
 	def _generate_rsa_keypair(self, bits=2048):
-		new_key = M2Crypto.RSA.gen_key(bits, 65537)
+		new_key = M2Crypto.RSA.gen_key(bits, 3)
 		new_key.save_key('id-rsa', cipher=None)
 		new_key.save_pub_key('id-rsa.pub')
 	def _rsa_encrypt(self, data):
-		return M2Crypto.RSA.load_pub_key(self._ek).public_encrypt(data, M2Crypto.RSA.pkcs1_oaep_padding)
+		return self._ek.public_encrypt(data, M2Crypto.RSA.pkcs1_oaep_padding)
 	def _rsa_decrypt(self, v):
-		return M2Crypto.RSA.load_key(self._sk).private_decrypt(v, M2Crypto.RSA.pkcs1_oaep_padding)
+		return self._sk.private_decrypt(v, M2Crypto.RSA.pkcs1_oaep_padding)
 	def _generate_sym_key(self):
 		self.key = M2Crypto.Rand.rand_bytes(32)
 		self.iv = M2Crypto.Rand.rand_bytes(16)
@@ -111,10 +115,80 @@ class SChat(Chat):
 	def _aes_decrypt(self, v):
 		cipher = self._generate_cipher(self.DEC)
 		data = cipher.update(v)
-		data = msg + cipher.final()
+		data = data + cipher.final()
 		del(cipher)
 		return data
 	def _handhsake(self, peer):
 		pass
 	def connect(self):
 		Chat.connect(self)
+		# ---------------------------Handhsake------------------------- #
+		pub_key = M2Crypto.RSA.load_pub_key('id-rsa.pub')
+		memory = M2Crypto.BIO.MemoryBuffer()
+		pub_key.save_pub_key_bio(memory)
+		pub_key_bio = memory.getvalue()
+		pub_key_fp = hashlib.sha1(bytes(pub_key_bio)).hexdigest()
+		# Send fingerprint
+		self.send_raw(pub_key_fp)
+		# Check known-hosts for fingerprint
+		while len(self.received) == 0: pass
+		pub_key_fp = self.received[0]
+		unknown = True
+		known_hosts = {}
+		try:
+			fp = open('known-hosts', 'r')
+			known_hosts = json.loads(fp.read())
+			fp.close()
+			for k, v in known_hosts.iteritems():
+				if pub_key_fp in v.values():
+					memory.write(str(k))
+					self._ek = M2Crypto.RSA.load_pub_key_bio(memory)
+					unknown = False
+					break
+		except: print 'file error'
+			
+		# If found, request certificate
+		# Else, request public key
+		if unknown:
+			self.send_raw('public key')
+		else:
+			self.send_raw('certificate')
+				
+		# Send certificate or public key
+		while len(self.received) == 1: pass
+		task = self.received[1]
+		if task == 'public key':
+			self.send_raw(pub_key_bio)
+		else:
+			pass
+		# Save peer's public key
+		if unknown:
+			while len(self.received) == 2: pass
+			pk = self.received[2]
+			if raw_input('Add %s to known-hosts? (y/n): ' % self.host) == 'y':
+				known_hosts[pk] = {"SHA-1": hashlib.sha1(bytes(pk)).hexdigest()}
+				fp = open('known-hosts', 'w')
+				fp.write(json.dumps(known_hosts, sort_keys=True, indent=4, separators=(',', ': ')))
+				fp.close()
+			memory.write(pk)
+			self._ek = M2Crypto.RSA.load_pub_key_bio(memory)
+		# Send certificate
+		# Sign certificate
+		# Send signed certificate
+		# Verify peer's signature
+		# Agree on a symmetric key
+		if self.server:
+			self._generate_sym_key()
+			self.send_raw(self._rsa_encrypt(self.key))
+			self.send_raw(self._rsa_encrypt(self.iv))
+		else:
+			while len(self.received) < unknown+4: pass
+			self.key = self._rsa_decrypt(self.received[-2])
+			self.iv = self._rsa_decrypt(self.received[-1])
+
+	def send(self, data):
+		Chat.send(self, self._aes_encrypt(data))
+	def send_raw(self, data):
+		Chat.send(self, data)
+		time.sleep(0.25)
+

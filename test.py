@@ -35,7 +35,7 @@ try:
 	while True:
 		a = con2.getch()
 		if a == 27: break
-		elif a in (curses.KEY_BACKSPACE, 0x7f):
+		elif a in (curses.KEY_BACKSPACE, 0x7f, 0x08):
 			y, x = con2.getyx()
 			if len(msg) > 0:
 				msg = msg[0:-1]
