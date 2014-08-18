@@ -128,6 +128,7 @@ class SChat(Chat):
 		pub_key.save_pub_key_bio(memory)
 		pub_key_bio = memory.getvalue()
 		pub_key_fp = hashlib.sha1(bytes(pub_key_bio)).hexdigest()
+		cert = time.ctime() + M2Crypto.Rand.rand_bytes(128)
 		# Send fingerprint
 		self.send_raw(pub_key_fp)
 		# Check known-hosts for fingerprint
@@ -153,14 +154,13 @@ class SChat(Chat):
 			self.send_raw('public key')
 		else:
 			self.send_raw('certificate')
-				
-		# Send certificate or public key
+		
+		# Send public key and certificate
 		while len(self.received) == 1: pass
 		task = self.received[1]
 		if task == 'public key':
 			self.send_raw(pub_key_bio)
-		else:
-			pass
+		self.send_raw(cert)
 		# Save peer's public key
 		if unknown:
 			while len(self.received) == 2: pass
@@ -172,17 +172,31 @@ class SChat(Chat):
 				fp.close()
 			memory.write(pk)
 			self._ek = M2Crypto.RSA.load_pub_key_bio(memory)
-		# Send certificate
 		# Sign certificate
-		# Send signed certificate
+		while len(self.received) == 2+unknown: pass
+		pcert = self.received[2+unknown]
+		signature = self._sk.sign_rsassa_pss(pcert)
+		self.send_raw(signature)
 		# Verify peer's signature
+		while len(self.received) == 3+unknown: pass
+		psign = self.received[3+unknown]
+		try:
+			if self._ek.verify_rsassa_pss(cert, psign):
+				print "Verified"
+			else:
+				print "Not verified"
+				self.close()
+				return
+		except:
+			self.close()
+			return
 		# Agree on a symmetric key
 		if self.server:
 			self._generate_sym_key()
 			self.send_raw(self._rsa_encrypt(self.key))
 			self.send_raw(self._rsa_encrypt(self.iv))
 		else:
-			while len(self.received) < unknown+4: pass
+			while len(self.received) < unknown+6: pass
 			self.key = self._rsa_decrypt(self.received[-2])
 			self.iv = self._rsa_decrypt(self.received[-1])
 
