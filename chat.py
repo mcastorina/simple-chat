@@ -10,7 +10,7 @@ class Chat(threading.Thread):
 		self.port = port
 		self.server = False
 		self._sockets = []
-		self.received = Queue.Queue()
+		self._received = Queue.Queue()
 		self.log = Queue.Queue()
 		self.RECV_BUFFER = 4096
 	def connect(self):
@@ -53,21 +53,21 @@ class Chat(threading.Thread):
 			rs, ws, es = select.select(self._sockets, [], [], 5)
 			for sock in rs:
 				if self.server and sock == self._p:
-					# Server - Data received
+					# Server - Data _received
 					try:
 						data = sock.recv(self.RECV_BUFFER)
 						if data:
-							self.received.put(data)
+							self._received.put(data)
 							self.log.put(('Received - '+time.ctime(), data))
 					except:
 						print 'error'
 						sock.close()
 						break
 				elif not self.server and sock == self._s:
-					# Client - Data received
+					# Client - Data _received
 					data = sock.recv(self.RECV_BUFFER)
 					if data:
-						self.received.put(data)
+						self._received.put(data)
 						self.log.put(('Received - '+time.ctime(), data))
 					else:
 						print 'error3'
@@ -137,8 +137,8 @@ class SChat(Chat):
 		# Send fingerprint
 		self.send_raw(pub_key_fp)
 		# Check known-hosts for fingerprint
-		while self.received.qsize() == 0: pass
-		pub_key_fp = self.received.get()
+		while self._received.qsize() == 0: pass
+		pub_key_fp = self._received.get()
 		unknown = True
 		known_hosts = {}
 		try:
@@ -161,15 +161,15 @@ class SChat(Chat):
 			self.send_raw('certificate')
 		
 		# Send public key and certificate
-		while self.received.qsize() == 0: pass
-		task = self.received.get()
+		while self._received.qsize() == 0: pass
+		task = self._received.get()
 		if task == 'public key':
 			self.send_raw(pub_key_bio)
 		self.send_raw(cert)
 		# Save peer's public key
 		if unknown:
-			while self.received.qsize() == 0: pass
-			pk = self.received.get()
+			while self._received.qsize() == 0: pass
+			pk = self._received.get()
 			if raw_input('Add %s to known-hosts? (y/n): ' % self.host) == 'y':
 				known_hosts[pk] = {"SHA-1": hashlib.sha1(bytes(pk)).hexdigest()}
 				fp = open('known-hosts', 'w')
@@ -178,13 +178,13 @@ class SChat(Chat):
 			memory.write(pk)
 			self._ek = M2Crypto.RSA.load_pub_key_bio(memory)
 		# Sign certificate
-		while self.received == 0: pass
-		pcert = self.received.get()
+		while self._received == 0: pass
+		pcert = self._received.get()
 		signature = self._sk.sign_rsassa_pss(pcert)
 		self.send_raw(signature)
 		# Verify peer's signature
-		while self.received.qsize() == 0: pass
-		psign = self.received.get()
+		while self._received.qsize() == 0: pass
+		psign = self._received.get()
 		try:
 			if self._ek.verify_rsassa_pss(cert, psign):
 				print "Verified"
@@ -201,9 +201,9 @@ class SChat(Chat):
 			self.send_raw(self._rsa_encrypt(self.key))
 			self.send_raw(self._rsa_encrypt(self.iv))
 		else:
-			while self.received.qsize() < 2: pass
-			self.key = self._rsa_decrypt(self.received.get())
-			self.iv = self._rsa_decrypt(self.received.get())
+			while self._received.qsize() < 2: pass
+			self.key = self._rsa_decrypt(self._received.get())
+			self.iv = self._rsa_decrypt(self._received.get())
 		self._dthread = threading.Thread(target=self._decrypt_pending_data)
 		self._dthread.daemon = True
 		self._dthread.start()
@@ -215,7 +215,13 @@ class SChat(Chat):
 		Chat.send(self, data)
 		time.sleep(0.25)
 	def _decrypt_pending_data(self):
-		while True:
+		while not self._stop:
 			# Queue.Queue.get by default blocks until getting an item
-			data = self._aes_decrypt(self.received.get())
-			self.dlog.put(('Decrypted - '+time.ctime(), data))
+			try:
+				data = self._aes_decrypt(self._received.get(True, 5))
+				self.dlog.put(('Decrypted - '+time.ctime(), data))
+			except: pass
+	def close(self):
+		Chat.close(self)
+		try: self._dthread.join()
+		except: pass
