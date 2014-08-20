@@ -53,7 +53,7 @@ class Chat(threading.Thread):
 			rs, ws, es = select.select(self._sockets, [], [], 5)
 			for sock in rs:
 				if self.server and sock == self._p:
-					# Server - Data _received
+					# Server - Data received
 					try:
 						data = sock.recv(self.RECV_BUFFER)
 						if data:
@@ -64,7 +64,7 @@ class Chat(threading.Thread):
 						sock.close()
 						break
 				elif not self.server and sock == self._s:
-					# Client - Data _received
+					# Client - Data received
 					data = sock.recv(self.RECV_BUFFER)
 					if data:
 						self._received.put(data)
@@ -96,6 +96,7 @@ class SChat(Chat):
 		self._sk = self._ek = None
 		self.dlog = Queue.Queue()
 		if not os.path.isfile('id-rsa') or not os.path.isfile('id-rsa.pub'):
+			print 'Generating new RSA keypair'
 			self._generate_rsa_keypair()
 		self._sk = M2Crypto.RSA.load_key('id-rsa')
 	def _generate_rsa_keypair(self, bits=2048):
@@ -107,7 +108,9 @@ class SChat(Chat):
 	def _rsa_decrypt(self, v):
 		return self._sk.private_decrypt(v, M2Crypto.RSA.pkcs1_oaep_padding)
 	def _generate_sym_key(self):
+		# 32 bytes for AES-256
 		self.key = M2Crypto.Rand.rand_bytes(32)
+		# Initialization vector is always 16 bytes
 		self.iv = M2Crypto.Rand.rand_bytes(16)
 	def _generate_cipher(self, op):
 		return M2Crypto.EVP.Cipher(alg='aes_256_cbc', key=self.key, iv=self.iv, op=op)
@@ -123,8 +126,6 @@ class SChat(Chat):
 		data = data + cipher.final()
 		del(cipher)
 		return data
-	def _handhsake(self, peer):
-		pass
 	def connect(self):
 		Chat.connect(self)
 		# ---------------------------Handhsake------------------------- #
