@@ -1,4 +1,6 @@
-import socket, select, sys, threading, time, M2Crypto, os.path, hashlib, json, Queue
+import socket, select, sys, threading, time, os.path, hashlib, json, Queue
+try: import M2Crypto
+except: print 'M2Crypto is not installed, you will be unable to use SChat.'
 
 class Chat(threading.Thread):
 	def __init__(self, host, port):
