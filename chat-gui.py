@@ -1,4 +1,4 @@
-import curses, sys, time
+import curses, sys, time, threading, Queue
 from chat import SChat
 
 
@@ -21,14 +21,14 @@ from chat import SChat
 # -------------------------------------------- #
 ################################################
 
-#if len(sys.argv) != 3:
-#	print 'Usage: python chat-gui.py host port'
-#	print 'Example:\n\tpython chat-gui.py 192.168.254.1 1234'
-#	sys.exit()
+if len(sys.argv) != 3:
+	print 'Usage: python chat-gui.py host port'
+	print 'Example:\n\tpython chat-gui.py 192.168.254.1 1234'
+	sys.exit()
 
 # Initialize SChat
-#chat = SChat(sys.argv[1], int(sys.argv[2]))
-#chat.connect()
+chat = SChat(sys.argv[1], int(sys.argv[2]))
+chat.connect()
 
 # Initialize GUI
 stdscr = curses.initscr()
@@ -54,6 +54,7 @@ win2.refresh()
 # Initialize con1
 con1 = curses.newwin(size_y*4/5-2, size_x-2, 1, 1)
 con1.scrollok(True)
+con1.move(0,0)
 con1.refresh()
 
 # Initialize con2
@@ -63,6 +64,22 @@ con2.keypad(1)
 def c2refr(): con2.refresh(con2_pos, 0, size_y*4/5+1, 1, size_y-2, size_x-2)
 c2refr()
 con2.keypad(1)
+
+# Create thread for incoming messages
+messages = []
+def wait_for_message(chat, messages):
+	while True:
+		try:
+			info = chat.dlog.get(True, 5)
+			con1.addstr(str(info)+'\n')
+			con1.refresh()
+			c2refr()
+			messages += [info]
+		except Queue.Empty: pass
+
+thread = threading.Thread(target=wait_for_message, args=(chat,messages))
+thread.daemon = True
+thread.start()
 
 msg = ''
 while True:
@@ -98,3 +115,7 @@ curses.nocbreak()
 stdscr.keypad(0)
 curses.echo()
 curses.endwin()
+chat.close()
+
+print messages
+print chat.dlog.queue
